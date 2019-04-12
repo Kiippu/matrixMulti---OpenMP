@@ -10,8 +10,8 @@
 USHORT MAX_VALUE = 1;
 USHORT MIN_VALUE = 1;
 /// row and colume fill globals
-USHORT ROW_LENGTH = 3;
-USHORT COL_LENGTH = 3;
+USHORT ROW_LENGTH = 50;
+USHORT COL_LENGTH = 50;
 
 
 ///Global matrix objects

@@ -7,18 +7,24 @@
 #include <windows.h>
 
 // get num of cores
-const int maxNumThreads = omp_get_max_threads();
+const int maxNumThreads = 8;//omp_get_max_threads();
 
 //no thread function
 void *Matrix_Multiplication_noThread(void *arguments)
 {
 	struct threadArgs *args = (struct threadArgs *)arguments;
+	const USHORT& count0 = args->m_matrix0->getColCount();
+	const USHORT& count1 = args->m_matrix1->getColCount();
+	const USHORT& count2 = args->m_matrix0->getColCount();
+	auto& matrix_final = args->m_matrix_final->getValue();
+	auto& matrix_0 = args->m_matrix0->getValue();
+	auto& matrix_1 = args->m_matrix1->getValue();
 
-	for (int i = 0; i < args->m_matrix0->getRowCount(); ++i) {
-		for (int j = 0; j < args->m_matrix1->getColCount(); ++j) {
-			for (int k = 0; k < args->m_matrix0->getColCount(); ++k)
+	for (int i = 0; i < count0; ++i) {
+		for (int j = 0; j < count1; ++j) {
+			for (int k = 0; k < count2; ++k)
 			{
-				args->m_matrix_final->getValue()[i][j] += args->m_matrix0->getValue()[i][k] * args->m_matrix1->getValue()[k][j];
+				matrix_final[i][j] += matrix_0[i][k] * matrix_1[k][j];
 			}
 		}
 	}
@@ -29,14 +35,20 @@ void *Matrix_Multiplication_noThread(void *arguments)
 void *Matrix_Multiplication_stage_0(void *arguments)
 {
 	struct threadArgs *args = (struct threadArgs *)arguments;
+	const USHORT& count0 = args->m_matrix0->getColCount();
+	const USHORT& count1 = args->m_matrix1->getColCount();
+	auto& matrix_final = args->m_matrix_final->getValue();
+	auto& matrix_0 = args->m_matrix0->getValue();
+	auto& matrix_1 = args->m_matrix1->getValue();
 
 	// set num of threads to core's count and run threading in loop only
+	omp_set_dynamic(0);
 	omp_set_num_threads(maxNumThreads);
 #pragma omp parallel for 
-	for (int j = 0; j < args->m_matrix1->getColCount(); ++j) {
-		for (int k = 0; k < args->m_matrix0->getColCount(); ++k)
+	for (int j = 0; j < count1; ++j) {
+		for (int k = 0; k < count0; ++k)
 		{
-			args->m_matrix_final->getValue()[args->i][j] += args->m_matrix0->getValue()[args->i][k] * args->m_matrix1->getValue()[k][j];
+			matrix_final[args->i][j] += matrix_0[args->i][k] * matrix_1[k][j];
 		}
 	}
 
@@ -48,13 +60,18 @@ void *Matrix_Multiplication_stage_0(void *arguments)
 void *Matrix_Multiplication_stage_1(void *arguments)
 {
 	struct threadArgs *args = (struct threadArgs *)arguments;
-
+	const USHORT& count = args->m_matrix0->getColCount();
+	auto& matrix_final = args->m_matrix_final->getValue();
+	auto& matrix_0 = args->m_matrix0->getValue();
+	auto& matrix_1 = args->m_matrix1->getValue();
 	// set num of threads to core's count and run threading in loop only
+	//omp_set_dynamic(0);
 	omp_set_num_threads(maxNumThreads);
-#pragma omp parallel for 
-	for (int k = 0; k < args->m_matrix0->getColCount(); ++k)
+#pragma omp parallel for
+	for (int k = 0; k < count; ++k)
 	{
-		args->m_matrix_final->getValue()[args->i][args->j] += args->m_matrix0->getValue()[args->i][k] * args->m_matrix1->getValue()[k][args->j];
+		//printf("1: Thread# %d: k = %d\n", omp_get_thread_num(), k);
+		matrix_final[args->i][args->j] += matrix_0[args->i][k] * matrix_1[k][args->j];
 	}
 
 	return arguments;
@@ -65,12 +82,17 @@ void *Matrix_Multiplication_stage_1(void *arguments)
 void *Matrix_Multiplication_stage_2(void *arguments)
 {
 	struct threadArgs *args = (struct threadArgs *)arguments;
-
+	unsigned count = args->m_matrix0->getColCount();
+	auto& matrix_final = args->m_matrix_final->getValue();
+	auto& matrix_0 = args->m_matrix0->getValue();
+	auto& matrix_1 = args->m_matrix1->getValue();
 	// set num of threads to core's count and run single thread for this scope
+	omp_set_dynamic(0);
 	omp_set_num_threads(maxNumThreads);
 #pragma omp single
-	args->m_matrix_final->getValue()[args->i][args->j] += args->m_matrix0->getValue()[args->i][args->k] * args->m_matrix1->getValue()[args->k][args->j];
-
+	{
+		matrix_final[args->i][args->j] += matrix_0[args->i][args->k] * matrix_1[args->k][args->j];
+	}
 	return arguments;
 }
 
@@ -92,11 +114,9 @@ void Helper::multiplyMatrix_thread0()
 	args->m_matrix0 = m_matrix0;
 	args->m_matrix1 = m_matrix1;
 	args->m_matrix_final = m_matrix_final;
-	{
-		// run threaded function initialiser
-		Matrix_Multiplication_noThread((void*)args.get());
-	}
-	// complete and add to timer
+
+	Matrix_Multiplication_noThread((void*)args.get());
+
 	masterDelta.addFinishTime("no thread: ");
 	masterDelta.printFinalTimeSheet();
 }
